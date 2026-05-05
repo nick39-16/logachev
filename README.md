@@ -1,136 +1,224 @@
-### Пошаговая инструкция по созданию приложения «GitHub User Finder»
+# Expense Tracker — пошаговая инструкция по созданию приложения
 
-Ниже приведён подробный план для реализации GUI-приложения с поиском пользователей GitHub, сохранением избранных и использованием Git.
+## 1. Структура проекта
 
-### 1. Поле ввода для поиска пользователя
+Создайте папку `expense_tracker` и добавьте в неё:
+- файл `main.py` — основной код приложения;
+- файл `expenses.json` — для хранения данных о расходах;
+- файл `.gitignore` — чтобы не отслеживать временные файлы;
+- файл `README.md` — описание проекта.
 
-- В главном окне приложения разместите текстовое поле (`Entry` в Tkinter, `QLineEdit` в PyQt или аналогичное в другой библиотеке).
-- Добавьте кнопку «Поиск» рядом с полем.
-- При нажатии на кнопку считывайте введённый логин и передавайте его в функцию поиска.
-
-### 2. Отображение результатов поиска
-
-- После получения данных с GitHub API выводите список пользователей в виде таблицы или списка.
-- Для каждого пользователя отображайте:
-  - Логин.
-  - Аватар (можно загрузить по URL из API).
-  - Ссылку на профиль.
-
-### 3. Добавление пользователей в избранное
-
-- Рядом с каждым найденным пользователем добавьте кнопку «Добавить в избранное».
-- При нажатии пользователь сохраняется в отдельный список избранных.
-
-### 4. Сохранение избранных пользователей в JSON
-
-- Для хранения избранных используйте файл `favorites.json`.
-- При добавлении пользователя обновляйте этот файл (добавляйте новые записи или обновляйте существующие).
-- При запуске приложения загружайте избранных из файла и отображайте их в отдельном разделе.
-
-### 5. Проверка корректности ввода
-
-- Перед отправкой запроса проверяйте, что поле поиска не пустое.
-- Если поле пустое — выводите предупреждение пользователю.
-
-### 6. Использование Git
-
-1. **Создайте репозиторий:**
-   - В командной строке:
-     ```bash
-     git init
-     git remote add origin <ссылка_на_репозиторий>
-     ```
-2. **Добавьте .gitignore:**
-   - Создайте файл `.gitignore` и добавьте туда:
-     ```
-     __pycache__/
-     *.pyc
-     .env
-     favorites.json
-     ```
-3. **Коммиты и пуш:**
-   - Регулярно сохраняйте изменения:
-     ```bash
-     git add .
-     git commit -m "Описание изменений"
-     git push origin main
-     ```
-
-### 7. Написание README
-
-Создайте файл `README.md` (или `.txt`, `.docx`) с такой структурой:
-
-```
-# GitHub User Finder
-
-## Автор
-Иванов Иван
-
-## Описание
-Приложение для поиска пользователей GitHub с возможностью добавления в избранное и сохранения списка в JSON.
-
-## Использование API
-1. Для поиска пользователя используется эндпоинт: `https://api.github.com/users/{username}`
-2. Для получения аватара и профиля используйте поля `avatar_url` и `html_url` из ответа API.
-
-## Примеры использования
-1. Введите логин пользователя в поле поиска и нажмите «Поиск».
-2. Выберите пользователя из списка и нажмите «Добавить в избранное».
-3. Избранные пользователи сохраняются в `favorites.json`.
-
-## Технологии
-- Python
-- Tkinter / PyQt (или другая GUI-библиотека)
-- GitHub API
-- JSON
-
-## Запуск
-1. Установите зависимости: `pip install -r requirements.txt`
-2. Запустите: `python main.py`
-```
-
-### Пример кода (на Python + Tkinter)
+## 2. Основной код (`main.py`)
 
 ```python
 import tkinter as tk
-import requests
+from tkinter import ttk, messagebox
 import json
+from datetime import datetime
 
-# Поиск пользователя
-def search_user():
-    username = entry.get()
-    if not username:
-        result_label.config(text="Введите логин!")
-        return
-    response = requests.get(f"https://api.github.com/users/{username}")
-    if response.status_code == 200:
-        user = response.json()
-        result_label.config(text=f"{user['login']} - {user['html_url']}")
-    else:
-        result_label.config(text="Пользователь не найден")
+EXPENSES_FILE = 'expenses.json'
 
-# Добавление в избранное
-def add_to_favorites(user):
+def load_expenses():
     try:
-        with open("favorites.json", "r") as f:
-            favorites = json.load(f)
+        with open(EXPENSES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
     except FileNotFoundError:
-        favorites = []
-    favorites.append(user)
-    with open("favorites.json", "w") as f:
-        json.dump(favorites, f)
+        return []
 
-# GUI
+def save_expenses(data):
+    with open(EXPENSES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def validate_input():
+    amount = entry_amount.get()
+    date = entry_date.get()
+
+    if not amount.replace('.', '', 1).isdigit() or float(amount) <= 0:
+        messagebox.showerror("Ошибка", "Сумма должна быть положительным числом.")
+        return False
+
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        messagebox.showerror("Ошибка", "Дата должна быть в формате ГГГГ-ММ-ДД.")
+        return False
+
+    return True
+
+def add_expense():
+    if validate_input():
+        expense = {
+            "amount": float(entry_amount.get()),
+            "category": combo_category.get(),
+            "date": entry_date.get()
+        }
+        expenses.append(expense)
+        save_expenses(expenses)
+        update_table()
+        clear_inputs()
+
+def update_table(filter_category=None, filter_date=None):
+    for i in tree.get_children():
+        tree.delete(i)
+    for exp in expenses:
+        if filter_category and exp["category"] != filter_category:
+            continue
+        if filter_date and exp["date"] != filter_date:
+            continue
+        tree.insert("", "end", values=(exp["date"], exp["category"], exp["amount"]))
+
+def filter_expenses():
+    category = combo_filter_category.get() if combo_filter_category.get() else None
+    date = entry_filter_date.get() if entry_filter_date.get() else None
+    update_table(category, date)
+
+def sum_expenses():
+    start_date = entry_start_date.get()
+    end_date = entry_end_date.get()
+
+    try:
+        if start_date: datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date: datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        messagebox.showerror("Ошибка", "Даты должны быть в формате ГГГГ-ММ-ДД.")
+        return
+
+    total = sum(
+        e["amount"] for e in expenses
+        if (not start_date or e["date"] >= start_date)
+        and (not end_date or e["date"] <= end_date)
+    )
+    label_sum.config(text=f"Сумма расходов: {total:.2f} ₽")
+
+def clear_inputs():
+    entry_amount.delete(0, tk.END)
+    combo_category.set('')
+    entry_date.delete(0, tk.END)
+
+expenses = load_expenses()
+
 root = tk.Tk()
-entry = tk.Entry(root)
-entry.pack()
-btn_search = tk.Button(root, text="Поиск", command=search_user)
-btn_search.pack()
-result_label = tk.Label(root, text="")
-result_label.pack()
+root.title("Expense Tracker")
+root.geometry("800x500")
+
+tab_control = ttk.Notebook(root)
+tab_main = ttk.Frame(tab_control)
+tab_filter = ttk.Frame(tab_control)
+tab_sum = ttk.Frame(tab_control)
+tab_control.add(tab_main, text="Добавить расход")
+tab_control.add(tab_filter, text="Фильтр")
+tab_control.add(tab_sum, text="Сумма за период")
+tab_control.pack(expand=1, fill="both")
+
+# Вкладка "Добавить расход"
+tk.Label(tab_main, text="Сумма:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+entry_amount = tk.Entry(tab_main)
+entry_amount.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_main, text="Категория:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+combo_category = ttk.Combobox(tab_main, values=["Еда", "Транспорт", "Развлечения", "Прочее"])
+combo_category.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Label(tab_main, text="Дата (ГГГГ-ММ-ДД):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+entry_date = tk.Entry(tab_main)
+entry_date.grid(row=2, column=1, padx=5, pady=5)
+
+tk.Button(tab_main, text="Добавить расход", command=add_expense).grid(row=3, column=0, columnspan=2, pady=10)
+
+tree = ttk.Treeview(tab_main, columns=("Дата", "Категория", "Сумма"), show="headings")
+for col in ("Дата", "Категория", "Сумма"):
+    tree.heading(col, text=col)
+tree.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+scrollbar = ttk.Scrollbar(tab_main, orient="vertical", command=tree.yview)
+scrollbar.grid(row=4, column=2, sticky="ns")
+tree.configure(yscrollcommand=scrollbar.set)
+
+# Вкладка "Фильтр"
+tk.Label(tab_filter, text="Категория:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+combo_filter_category = ttk.Combobox(tab_filter, values=["Все", "Еда", "Транспорт", "Развлечения", "Прочее"])
+combo_filter_category.set("Все")
+combo_filter_category.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_filter, text="Дата (ГГГГ-ММ-ДД):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+entry_filter_date = tk.Entry(tab_filter)
+entry_filter_date.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Button(tab_filter, text="Применить фильтр", command=filter_expenses).grid(row=2, column=0, columnspan=2, pady=10)
+
+# Вкладка "Сумма за период"
+tk.Label(tab_sum, text="С:").grid(row=0, column=0, padx=5, pady=5)
+entry_start_date = tk.Entry(tab_sum)
+entry_start_date.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_sum, text="По:").grid(row=1, column=0, padx=5, pady=5)
+entry_end_date = tk.Entry(tab_sum)
+entry_end_date.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Button(tab_sum, text="Посчитать сумму", command=sum_expenses).grid(row=2, column=0, columnspan=2, pady=10)
+label_sum = tk.Label(tab_sum, text="Сумма расходов: 0.00 ₽")
+label_sum.grid(row=3, column=0, columnspan=2, pady=10)
+
+update_table()
 root.mainloop()
 ```
 
-> ⚙️ Для полноценной работы добавьте обработку ошибок, загрузку избранных при старте, отображение списка и другие улучшения.
+## 3. Файл `.gitignore`
 
-Если потребуется — могу подготовить полный код под выбранную библиотеку или помочь с расширением функционала.
+```
+__pycache__/
+*.pyc
+*.log
+*.swp
+*.bak
+```
+*(Если хотите хранить данные в Git — уберите `expenses.json` из .gitignore)*
+
+## 4. README.md (пример оформления)
+
+```
+# Expense Tracker
+
+**Автор:** Иван Иванов
+
+## Описание программы
+
+Expense Tracker — приложение для учёта личных расходов с графическим интерфейсом. Позволяет добавлять расходы по категориям и датам, фильтровать записи и считать сумму за выбранный период. Данные сохраняются в формате JSON.
+
+## Как использовать
+
+1. Установите Python 3.x.
+2. Скопируйте файлы проекта в одну папку.
+3. Запустите main.py.
+4. Введите сумму (положительное число), выберите категорию и дату (ГГГГ-ММ-ДД), нажмите «Добавить расход».
+5. Для фильтрации используйте вкладку «Фильтр».
+6. Для подсчёта суммы за период — вкладку «Сумма за период».
+7. Данные сохраняются автоматически.
+
+## Примеры использования
+
+- Добавить расход: 100 ₽ на еду 2026-04-24.
+- Посчитать сумму расходов за апрель 2026 года.
+- Отфильтровать расходы по категории «Транспорт».
+```
+
+## 4. Использование Git
+
+1. Откройте терминал в папке проекта.
+2. Инициализируйте репозиторий:
+   ```
+   git init
+   ```
+3. Добавьте файлы:
+   ```
+   git add .
+   ```
+4. Сделайте первый коммит:
+   ```
+   git commit -m "Initial commit"
+   ```
+5. (Опционально) Создайте репозиторий на GitHub/GitLab и залейте проект.
+```
+git remote add origin <ваш_репозиторий>
+git push -u origin master
+```
+```
