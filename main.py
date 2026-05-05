@@ -1,37 +1,149 @@
 import tkinter as tk
-import requests
+from tkinter import ttk, messagebox
 import json
+from datetime import datetime
 
-# Поиск пользователя
-def search_user():
-    username = entry.get()
-    if not username:
-        result_label.config(text="Введите логин!")
-        return
-    response = requests.get(f"https://api.github.com/users/{username}")
-    if response.status_code == 200:
-        user = response.json()
-        result_label.config(text=f"{user['login']} - {user['html_url']}")
-    else:
-        result_label.config(text="Пользователь не найден")
+EXPENSES_FILE = 'expenses.json'
 
-# Добавление в избранное
-def add_to_favorites(user):
+def load_expenses():
     try:
-        with open("favorites.json", "r") as f:
-            favorites = json.load(f)
+        with open(EXPENSES_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
     except FileNotFoundError:
-        favorites = []
-    favorites.append(user)
-    with open("favorites.json", "w") as f:
-        json.dump(favorites, f)
+        return []
 
-# GUI
+def save_expenses(data):
+    with open(EXPENSES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def validate_input():
+    amount = entry_amount.get()
+    date = entry_date.get()
+
+    if not amount.replace('.', '', 1).isdigit() or float(amount) <= 0:
+        messagebox.showerror("Ошибка", "Сумма должна быть положительным числом.")
+        return False
+
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        messagebox.showerror("Ошибка", "Дата должна быть в формате ГГГГ-ММ-ДД.")
+        return False
+
+    return True
+
+def add_expense():
+    if validate_input():
+        expense = {
+            "amount": float(entry_amount.get()),
+            "category": combo_category.get(),
+            "date": entry_date.get()
+        }
+        expenses.append(expense)
+        save_expenses(expenses)
+        update_table()
+        clear_inputs()
+
+def update_table(filter_category=None, filter_date=None):
+    for i in tree.get_children():
+        tree.delete(i)
+    for exp in expenses:
+        if filter_category and exp["category"] != filter_category:
+            continue
+        if filter_date and exp["date"] != filter_date:
+            continue
+        tree.insert("", "end", values=(exp["date"], exp["category"], exp["amount"]))
+
+def filter_expenses():
+    category = combo_filter_category.get() if combo_filter_category.get() else None
+    date = entry_filter_date.get() if entry_filter_date.get() else None
+    update_table(category, date)
+
+def sum_expenses():
+    start_date = entry_start_date.get()
+    end_date = entry_end_date.get()
+
+    try:
+        if start_date: datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date: datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        messagebox.showerror("Ошибка", "Даты должны быть в формате ГГГГ-ММ-ДД.")
+        return
+
+    total = sum(
+        e["amount"] for e in expenses
+        if (not start_date or e["date"] >= start_date)
+        and (not end_date or e["date"] <= end_date)
+    )
+    label_sum.config(text=f"Сумма расходов: {total:.2f} ₽")
+
+def clear_inputs():
+    entry_amount.delete(0, tk.END)
+    combo_category.set('')
+    entry_date.delete(0, tk.END)
+
+expenses = load_expenses()
+
 root = tk.Tk()
-entry = tk.Entry(root)
-entry.pack()
-btn_search = tk.Button(root, text="Поиск", command=search_user)
-btn_search.pack()
-result_label = tk.Label(root, text="")
-result_label.pack()
+root.title("Expense Tracker")
+root.geometry("800x500")
+
+tab_control = ttk.Notebook(root)
+tab_main = ttk.Frame(tab_control)
+tab_filter = ttk.Frame(tab_control)
+tab_sum = ttk.Frame(tab_control)
+tab_control.add(tab_main, text="Добавить расход")
+tab_control.add(tab_filter, text="Фильтр")
+tab_control.add(tab_sum, text="Сумма за период")
+tab_control.pack(expand=1, fill="both")
+
+# Вкладка "Добавить расход"
+tk.Label(tab_main, text="Сумма:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+entry_amount = tk.Entry(tab_main)
+entry_amount.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_main, text="Категория:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+combo_category = ttk.Combobox(tab_main, values=["Еда", "Транспорт", "Развлечения", "Прочее"])
+combo_category.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Label(tab_main, text="Дата (ГГГГ-ММ-ДД):").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+entry_date = tk.Entry(tab_main)
+entry_date.grid(row=2, column=1, padx=5, pady=5)
+
+tk.Button(tab_main, text="Добавить расход", command=add_expense).grid(row=3, column=0, columnspan=2, pady=10)
+
+tree = ttk.Treeview(tab_main, columns=("Дата", "Категория", "Сумма"), show="headings")
+for col in ("Дата", "Категория", "Сумма"):
+    tree.heading(col, text=col)
+tree.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky="nsew")
+scrollbar = ttk.Scrollbar(tab_main, orient="vertical", command=tree.yview)
+scrollbar.grid(row=4, column=2, sticky="ns")
+tree.configure(yscrollcommand=scrollbar.set)
+
+# Вкладка "Фильтр"
+tk.Label(tab_filter, text="Категория:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+combo_filter_category = ttk.Combobox(tab_filter, values=["Все", "Еда", "Транспорт", "Развлечения", "Прочее"])
+combo_filter_category.set("Все")
+combo_filter_category.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_filter, text="Дата (ГГГГ-ММ-ДД):").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+entry_filter_date = tk.Entry(tab_filter)
+entry_filter_date.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Button(tab_filter, text="Применить фильтр", command=filter_expenses).grid(row=2, column=0, columnspan=2, pady=10)
+
+# Вкладка "Сумма за период"
+tk.Label(tab_sum, text="С:").grid(row=0, column=0, padx=5, pady=5)
+entry_start_date = tk.Entry(tab_sum)
+entry_start_date.grid(row=0, column=1, padx=5, pady=5)
+
+tk.Label(tab_sum, text="По:").grid(row=1, column=0, padx=5, pady=5)
+entry_end_date = tk.Entry(tab_sum)
+entry_end_date.grid(row=1, column=1, padx=5, pady=5)
+
+tk.Button(tab_sum, text="Посчитать сумму", command=sum_expenses).grid(row=2, column=0, columnspan=2, pady=10)
+label_sum = tk.Label(tab_sum, text="Сумма расходов: 0.00 ₽")
+label_sum.grid(row=3, column=0, columnspan=2, pady=10)
+
+update_table()
 root.mainloop()
